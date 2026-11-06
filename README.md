@@ -28,23 +28,18 @@ files are read by the two converters, which turn them into version 2.0.
 One rule of the map format is not enforced in full: an inline AVIF image is checked for its file type only, not for
 the metadata an image may not carry. PNG and WebP images are checked completely.
 
-Not released yet: the version is `1.0.0-SNAPSHOT` and nothing is on Maven Central. To use it from another build,
-publish it to the local Maven repository (`~/.m2/repository`), which needs no credentials or signing:
+## Installation
 
-```bash
-./gradlew publishToMavenLocal
-```
-
-and depend on it with `mavenLocal()` among the consumer's repositories:
+The libraries are on Maven Central under `org.adelheid`, one artifact per module, all with the same version:
 
 ```kotlin
 dependencies {
-	implementation("org.adelheid:hondius-akm:1.0.0-SNAPSHOT")
+	implementation("org.adelheid:hondius-akm:1.0.0")
 }
 ```
 
 A JVM-only consumer uses the platform artifact, `org.adelheid:hondius-akm-jvm`. The other modules follow the same
-pattern: `hondius-akp`, `hondius-akm-converter`, `hondius-akp-converter`.
+pattern: `hondius-akp`, `hondius-akm-converter`, `hondius-akp-converter`. `hondius-container` comes with each of them.
 
 ### The map converter on JS and Wasm
 
@@ -116,6 +111,10 @@ A version 1 file opens with the same signature as a current one. `AkmV1Decoder.i
 
 That compiles every target and runs the JVM, Node and browser tests; the browser tests need Chrome. One target's
 tests run with `./gradlew jvmTest`, `./gradlew jsNodeTest`, `./gradlew jsBrowserTest` or `./gradlew wasmJsBrowserTest`.
+
+To try a build from another project before it is released, `./gradlew publishToMavenLocal` puts it into the local
+Maven repository (`~/.m2/repository`), which needs no credentials or signing. The other project then lists
+`mavenLocal()` among its repositories.
 
 The WebAssembly module in `native/png/pkg` is committed prebuilt. After a change to `native/png/src`, rebuild it with
 `native/png/build.ps1` (Rust 1.95.0, wasm-pack 0.14.0), which also keeps local paths out of the binary.

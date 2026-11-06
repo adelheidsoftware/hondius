@@ -5,6 +5,7 @@ import org.adelheid.hondius.container.FormatError
 import org.adelheid.hondius.container.FormatException
 import org.adelheid.hondius.container.Metadata
 import org.adelheid.hondius.container.Text
+import kotlin.jvm.JvmOverloads
 
 /**
  * A palette, as an `.akp` file holds it.
@@ -18,7 +19,7 @@ import org.adelheid.hondius.container.Text
  * @property metadata what the file says about itself
  * @property carriedChunks chunks of a later minor version that a reader did not know, kept so a rewrite preserves them
  */
-class AkpPalette(
+class AkpPalette @JvmOverloads constructor(
 	roleColors: List<AkpColor>,
 	val playerColors: List<AkpColor>,
 	val metadata: Metadata = Metadata(),

@@ -2,12 +2,13 @@ package org.adelheid.hondius.akp
 
 import org.adelheid.hondius.container.FormatError
 import org.adelheid.hondius.container.FormatException
+import kotlin.jvm.JvmOverloads
 
 /**
  * A named color: a role color, named by its role, or a player color, named for people. sRGB, alpha not
  * premultiplied; `a = 0xFF` is opaque.
  */
-data class AkpColor(
+data class AkpColor @JvmOverloads constructor(
 	val name: String,
 	val r: Int,
 	val g: Int,

@@ -1,5 +1,6 @@
 package org.adelheid.hondius.container
 
+import kotlin.jvm.JvmOverloads
 import kotlin.jvm.JvmStatic
 
 /** Someone a file credits. */
@@ -31,7 +32,7 @@ class MetadataField(val id: Int, val value: ByteArray) {
  * @property authors who is credited, in order
  * @property otherFields fields of a later minor version, carried along
  */
-data class Metadata(
+data class Metadata @JvmOverloads constructor(
 	val name: String? = null,
 	val generator: String? = null,
 	val authors: List<Author> = emptyList(),

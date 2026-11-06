@@ -1,5 +1,7 @@
 package org.adelheid.hondius.akm
 
+import kotlin.jvm.JvmOverloads
+
 /** Where a layer belongs when a reader draws the territories itself. */
 enum class LayerRole(val wireValue: Int) {
 	/** Painted before the territories. */
@@ -60,7 +62,7 @@ sealed interface AkmImage {
 	 * @property hints suggested locations, each a path relative to the map or an `https` URL. Advice only: a
 	 *   reader may ignore them, and a host should.
 	 */
-	class External(val sha256: ByteArray, val length: Long, val hints: List<String> = emptyList()) : AkmImage {
+	class External @JvmOverloads constructor(val sha256: ByteArray, val length: Long, val hints: List<String> = emptyList()) : AkmImage {
 		override fun equals(other: Any?): Boolean =
 			other is External && sha256.contentEquals(other.sha256) && length == other.length && hints == other.hints
 
@@ -80,7 +82,7 @@ sealed interface AkmImage {
  * @property width size on the canvas in pixels; the image is scaled to it
  * @property height size on the canvas in pixels
  */
-data class AkmLayer(
+data class AkmLayer @JvmOverloads constructor(
 	val role: LayerRole,
 	val name: String,
 	val zOrder: Int,

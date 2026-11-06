@@ -5,6 +5,7 @@ import org.adelheid.hondius.akp.AkpPalette
 import org.adelheid.hondius.container.BinaryWriter
 import org.adelheid.hondius.container.Chunk
 import org.adelheid.hondius.container.ContainerCodec
+import org.adelheid.hondius.container.Metadata
 import kotlin.jvm.JvmStatic
 
 /** Writes an [AkpPalette] as an `.akp` file. A palette has exactly one encoding. */
@@ -17,6 +18,19 @@ object AkpEncoder {
 			Chunk(AkpFormat.PLYR, Chunk.REQUIRED, encodeColors(palette.playerColors)),
 		) + palette.carriedChunks
 		return ContainerCodec.write(AkpFormat.SIGNATURE, palette.metadata, chunks)
+	}
+
+	/**
+	 * Returns [file] with its metadata replaced by [metadata] and everything else as it was.
+	 *
+	 * This is for a host that stores palette files and says who their authors are when it serves one. The file's
+	 * checksum is verified and a new one is written; the colors are not decoded. [file] is expected to be a palette
+	 * that [AkpDecoder.decode] accepted when it was stored.
+	 */
+	@JvmStatic
+	fun withMetadata(file: ByteArray, metadata: Metadata): ByteArray {
+		val container = ContainerCodec.read(file, AkpFormat.SIGNATURE)
+		return ContainerCodec.write(AkpFormat.SIGNATURE, metadata, container.chunks, container.versionMinor)
 	}
 
 	private fun encodeColors(colors: List<AkpColor>): ByteArray {

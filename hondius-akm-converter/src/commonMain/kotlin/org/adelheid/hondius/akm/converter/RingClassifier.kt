@@ -82,34 +82,6 @@ object RingClassifier {
 		return regions
 	}
 
-	/** Computes the centroid of an exterior ring using the Shoelace formula. */
-	fun computeCentroid(ring: AkmV1Ring): FloatArray {
-		var cx = 0.0
-		var cy = 0.0
-		var area = 0.0
-		val n = ring.pointCount
-		for (i in 0 until n) {
-			val j = (i + 1) % n
-			val cross = ring.x(i).toDouble() * ring.y(j).toDouble() - ring.x(j).toDouble() * ring.y(i).toDouble()
-			cx += (ring.x(i) + ring.x(j)) * cross
-			cy += (ring.y(i) + ring.y(j)) * cross
-			area += cross
-		}
-		area /= 2.0
-		if (abs(area) < 1e-10) {
-			var ax = 0f
-			var ay = 0f
-			for (i in 0 until n) {
-				ax += ring.x(i)
-				ay += ring.y(i)
-			}
-			return floatArrayOf(ax / n, ay / n)
-		}
-		cx /= 6.0 * area
-		cy /= 6.0 * area
-		return floatArrayOf(cx.toFloat(), cy.toFloat())
-	}
-
 	private data class RingWithArea(val ring: AkmV1Ring, val area: Double)
 
 	private fun flatten(points: List<FloatArray>): FloatArray {

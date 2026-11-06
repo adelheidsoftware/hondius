@@ -3,6 +3,7 @@ package org.adelheid.hondius.akm.converter
 import org.adelheid.hondius.akm.AkmBorders
 import org.adelheid.hondius.akm.AkmImage
 import org.adelheid.hondius.akm.AkmMap
+import org.adelheid.hondius.akm.AkmRegion
 import org.adelheid.hondius.akm.LayerRole
 import org.adelheid.hondius.akm.codec.AkmDecoder
 import org.adelheid.hondius.akm.codec.AkmEncoder
@@ -66,13 +67,34 @@ class RkmToAkmConverterTest {
 	}
 
 	@Test
-	fun convertedAnchorsLandInsideCanvas() {
-		val akm = converter.convert(loadRkm("/rkm/north-america.rkm"))
-		for (territory in akm.territories) {
-			val anchor = assertNotNull(territory.anchor, "territory ${territory.name} should have an anchor")
-			assertTrue(anchor.x in 0..akm.canvasWidth * akm.gridScale, "anchor x of ${territory.name} off the canvas: ${anchor.x}")
-			assertTrue(anchor.y in 0..akm.canvasHeight * akm.gridScale, "anchor y of ${territory.name} off the canvas: ${anchor.y}")
+	fun convertedAnchorsLieInsideTheirTerritories() {
+		for (fixture in listOf("/rkm/north-america.rkm", "/rkm/mediterranean.rkm")) {
+			val akm = converter.convert(loadRkm(fixture))
+			for (territory in akm.territories) {
+				val anchor = assertNotNull(territory.anchor, "territory ${territory.name} should have an anchor")
+				assertTrue(
+					territory.regions.any { contains(it, anchor.x, anchor.y) },
+					"the anchor of ${territory.name} in $fixture lies outside it: $anchor",
+				)
+			}
 		}
+	}
+
+	/** True when the point lies in the region and in none of its holes: each ring edge crossed flips the answer. */
+	private fun contains(region: AkmRegion, px: Int, py: Int): Boolean {
+		var inside = false
+		for (ring in region.rings) {
+			var j = ring.pointCount - 1
+			for (i in 0 until ring.pointCount) {
+				val ax = ring.x(i).toDouble()
+				val ay = ring.y(i).toDouble()
+				val bx = ring.x(j).toDouble()
+				val by = ring.y(j).toDouble()
+				if ((ay > py) != (by > py) && px < (bx - ax) * (py - ay) / (by - ay) + ax) inside = !inside
+				j = i
+			}
+		}
+		return inside
 	}
 
 	@Test

@@ -1,12 +1,11 @@
 package org.adelheid.hondius.akm.v1
 
+import org.adelheid.hondius.akm.AkmAnchors
 import org.adelheid.hondius.akm.AkmConnection
+import org.adelheid.hondius.akm.AkmGrid
 import org.adelheid.hondius.akm.AkmImage
 import org.adelheid.hondius.akm.AkmLayer
 import org.adelheid.hondius.akm.AkmMap
-import org.adelheid.hondius.akm.AkmPoint
-import org.adelheid.hondius.akm.AkmRegion
-import org.adelheid.hondius.akm.AkmRing
 import org.adelheid.hondius.akm.AkmTerritory
 import org.adelheid.hondius.akm.ImageFormat
 import org.adelheid.hondius.akm.LayerRole
@@ -17,7 +16,6 @@ import org.adelheid.hondius.container.FormatException
 import org.adelheid.hondius.container.Metadata
 import kotlin.jvm.JvmOverloads
 import kotlin.jvm.JvmStatic
-import kotlin.math.roundToInt
 
 /**
  * Puts float outlines, as version 1 and the legacy tracer hold them, onto the whole-number grid of the current
@@ -25,6 +23,8 @@ import kotlin.math.roundToInt
  */
 internal object GridGeometry {
 	/**
+	 * @param ownAnchors true when each territory's centroid is where its label goes, as in a version 1 file; false
+	 *   when the territories carry no such point, and one is then found on the grid
 	 * @return the territories that still have a shape on the grid, and the connections among them
 	 */
 	fun convert(
@@ -33,57 +33,24 @@ internal object GridGeometry {
 		gridBits: Int,
 		territories: List<AkmV1Territory>,
 		edges: List<AkmV1Edge>,
+		ownAnchors: Boolean = true,
 	): Pair<List<AkmTerritory>, List<AkmConnection>> {
-		val scale = 1 shl gridBits
-		val maxX = width * scale
-		val maxY = height * scale
 		val converted = ArrayList<AkmTerritory>(territories.size)
 		val indexById = HashMap<String, Int>()
 		for (territory in territories) {
-			val regions = territory.regions.mapNotNull { region(it, scale, maxX, maxY) }
+			val regions = territory.regions.mapNotNull { region -> AkmGrid.region(region.rings.map { it.points }, gridBits, width, height) }
 			// A territory whose every outline collapses on the grid has no shape left to draw
 			if (regions.isEmpty()) continue
 			indexById[territory.territoryId] = converted.size
-			val anchor = AkmPoint(
-				(territory.centroidX * scale).roundToInt().coerceIn(0, maxX),
-				(territory.centroidY * scale).roundToInt().coerceIn(0, maxY),
-			)
-			converted.add(AkmTerritory(territory.territoryId, regions, territory.label, anchor))
+			val shape = AkmTerritory(territory.territoryId, regions, territory.label)
+			val anchor = if (ownAnchors) {
+				AkmGrid.point(territory.centroidX, territory.centroidY, gridBits, width, height)
+			} else {
+				AkmAnchors.of(shape, gridBits)
+			}
+			converted.add(shape.copy(anchor = anchor))
 		}
 		return Pair(converted, connections(edges, indexById))
-	}
-
-	private fun region(region: AkmV1Region, scale: Int, maxX: Int, maxY: Int): AkmRegion? {
-		val outline = ring(region.exterior, scale, maxX, maxY, outline = true) ?: return null
-		return AkmRegion(listOf(outline) + region.holes.mapNotNull { ring(it, scale, maxX, maxY, outline = false) })
-	}
-
-	/**
-	 * Rounds a ring to the grid. Points that land on the one before them are dropped, a ring left with no area is
-	 * dropped whole, and the ring is turned the way its place in the region demands.
-	 */
-	private fun ring(ring: AkmV1Ring, scale: Int, maxX: Int, maxY: Int, outline: Boolean): AkmRing? {
-		val points = ArrayList<Int>(ring.points.size)
-		for (i in 0 until ring.pointCount) {
-			val x = (ring.x(i) * scale).roundToInt().coerceIn(0, maxX)
-			val y = (ring.y(i) * scale).roundToInt().coerceIn(0, maxY)
-			val last = points.size - 2
-			if (last >= 0 && points[last] == x && points[last + 1] == y) continue
-			points.add(x)
-			points.add(y)
-		}
-		while (points.size >= 4 && points[0] == points[points.size - 2] && points[1] == points[points.size - 1]) {
-			points.removeAt(points.size - 1)
-			points.removeAt(points.size - 1)
-		}
-		if (points.size < 6) return null
-		val rounded = AkmRing(points.toIntArray())
-		val area = rounded.signedArea2()
-		return when {
-			area == 0L -> null
-			(area > 0) == outline -> rounded
-			else -> rounded.reversed()
-		}
 	}
 
 	/**

@@ -8,6 +8,7 @@ import org.adelheid.hondius.container.BinaryWriter
 import org.adelheid.hondius.container.Chunk
 import org.adelheid.hondius.container.ChunkSpec
 import org.adelheid.hondius.container.ContainerCodec
+import org.adelheid.hondius.container.Metadata
 import kotlin.jvm.JvmStatic
 
 /** What the encoder and the decoder share about the map format. */
@@ -45,6 +46,19 @@ object AkmEncoder {
 		for (layer in map.layers) chunks.add(Chunk(AkmFormat.LAYR, 0, encodeLayer(layer)))
 		chunks.addAll(map.carriedChunks)
 		return ContainerCodec.write(AkmFormat.SIGNATURE, map.metadata, chunks)
+	}
+
+	/**
+	 * Returns [file] with its metadata replaced by [metadata] and everything else as it was.
+	 *
+	 * This is for a host that stores map files and says who their authors are when it serves one. The file's
+	 * checksum is verified and a new one is written, but no outline and no image is decoded, so it costs little;
+	 * [file] is expected to be a map that [AkmDecoder.decode] accepted when it was stored.
+	 */
+	@JvmStatic
+	fun withMetadata(file: ByteArray, metadata: Metadata): ByteArray {
+		val container = ContainerCodec.read(file, AkmFormat.SIGNATURE)
+		return ContainerCodec.write(AkmFormat.SIGNATURE, metadata, container.chunks, container.versionMinor)
 	}
 
 	private fun encodeGeometry(map: AkmMap): ByteArray {

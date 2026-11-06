@@ -13,6 +13,8 @@ import org.adelheid.hondius.akm.BlendMode
 import org.adelheid.hondius.akm.ImageFormat
 import org.adelheid.hondius.akm.LayerRole
 import org.adelheid.hondius.container.BinaryReader
+import org.adelheid.hondius.container.ByteArraySource
+import org.adelheid.hondius.container.ByteSource
 import org.adelheid.hondius.container.ContainerCodec
 import org.adelheid.hondius.container.FormatError
 import org.adelheid.hondius.container.FormatException
@@ -77,20 +79,35 @@ object AkmDecoder {
 	 * [decode] is what establishes that a file is a valid map.
 	 */
 	@JvmStatic
-	fun summarize(data: ByteArray): AkmSummary {
-		val (versionMinor, entries) = ContainerCodec.scan(data, AkmFormat.SIGNATURE)
-		val meta = entries.first()
-		val metadata = MetadataCodec.decode(data.copyOfRange(meta.payloadOffset, meta.payloadOffset + meta.payloadLength))
-		val geometry = entries.firstOrNull { it.tag == AkmFormat.GEOM }
+	fun summarize(data: ByteArray): AkmSummary = summarize(ByteArraySource(data))
+
+	/**
+	 * [summarize] for a file that is not in memory. Of [source] it reads the header, each chunk's ten-byte header,
+	 * the metadata and the first bytes of the geometry, and passes over everything else, the images included. A
+	 * folder of large maps is listed this way without loading one of them.
+	 */
+	@JvmStatic
+	fun summarize(source: ByteSource): AkmSummary {
+		val (versionMinor, chunks) = ContainerCodec.scan(source, AkmFormat.SIGNATURE) { tag, length ->
+			when (tag) {
+				ContainerCodec.META -> length
+				AkmFormat.GEOM -> GEOMETRY_HEAD_BYTES
+				else -> 0
+			}
+		}
+		val metadata = MetadataCodec.decode(chunks.first().head)
+		val geometry = chunks.firstOrNull { it.tag == AkmFormat.GEOM }
 			?: throw FormatException(FormatError.BAD_CHUNK_ORDER, "Chunk ${AkmFormat.GEOM} is missing")
-		// The four leading fields take ten bytes at most
-		val head = BinaryReader(data.copyOfRange(geometry.payloadOffset, geometry.payloadOffset + minOf(geometry.payloadLength, 16)))
+		val head = BinaryReader(geometry.head)
 		val width = head.readCount("The canvas width", AkmMap.MAX_CANVAS_DIMENSION, 1)
 		val height = head.readCount("The canvas height", AkmMap.MAX_CANVAS_DIMENSION, 1)
 		val gridBits = head.readU8()
 		val territories = head.readCount("The number of territories", AkmMap.MAX_TERRITORIES, 1)
-		return AkmSummary(versionMinor, metadata, width, height, gridBits, territories, entries.count { it.tag == AkmFormat.LAYR })
+		return AkmSummary(versionMinor, metadata, width, height, gridBits, territories, chunks.count { it.tag == AkmFormat.LAYR })
 	}
+
+	/** Enough of the geometry chunk for its four leading fields, which take ten bytes at most. */
+	private const val GEOMETRY_HEAD_BYTES = 16
 
 	/** The largest x and y a coordinate may have, and the points read so far against the file-wide limit. */
 	private class Bounds(val maxX: Int, val maxY: Int) {

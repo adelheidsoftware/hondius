@@ -72,6 +72,18 @@ class AkpCodecTest {
 	}
 
 	@Test
+	fun metadataIsReplacedWithoutTouchingTheColors() {
+		val bytes = AkpEncoder.encode(AkpPalette(roles, players, Metadata(name = "Dusk", generator = "test/1.0")))
+		val credited = Metadata(name = "Dusk", generator = "test/1.0", authors = listOf(Author.Credit("Adelkrieg")))
+		val restamped = AkpEncoder.withMetadata(bytes, credited)
+		assertContentEquals(AkpEncoder.encode(AkpPalette(roles, players, credited)), restamped)
+		assertEquals(credited, AkpDecoder.decode(restamped).metadata)
+
+		val damaged = bytes.copyOf().also { it[it.size - 1] = (it[it.size - 1] + 1).toByte() }
+		assertFormatError(FormatError.BAD_CHECKSUM) { AkpEncoder.withMetadata(damaged, credited) }
+	}
+
+	@Test
 	fun theFileOpensWithThePaletteSignatureAndVersionTwo() {
 		val bytes = AkpEncoder.encode(AkpPalette(roles, players))
 		assertContentEquals(byteArrayOf(0x83.toByte(), 0x41, 0x4B, 0x50, 0x0D, 0x0A, 0x1A, 0x0A, 0, 2, 0, 0), bytes.copyOfRange(0, 12))

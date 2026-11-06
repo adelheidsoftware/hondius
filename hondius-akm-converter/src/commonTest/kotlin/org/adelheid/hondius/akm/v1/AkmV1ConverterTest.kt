@@ -175,6 +175,15 @@ class AkmV1ConverterTest {
 	}
 
 	@Test
+	fun aVersionOneFileIsToldFromACurrentOne() {
+		val bytes = AkmV1TestEncoder.encode(v1)
+		assertTrue(AkmV1Decoder.isVersion1(bytes))
+		assertTrue(!AkmV1Decoder.isVersion1(AkmEncoder.encode(AkmV1Converter.convert(bytes))))
+		assertTrue(!AkmV1Decoder.isVersion1(bytes.copyOfRange(0, 12)))
+		assertTrue(!AkmV1Decoder.isVersion1(ByteArray(64)))
+	}
+
+	@Test
 	fun layersKeepTheirSettingsAndGetARole() {
 		val map = AkmV1Converter.convert(v1)
 		assertEquals(listOf("water", "labels"), map.layers.map { it.name })

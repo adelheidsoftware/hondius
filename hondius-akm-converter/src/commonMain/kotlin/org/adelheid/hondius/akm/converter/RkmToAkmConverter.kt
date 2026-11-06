@@ -8,7 +8,6 @@ import org.adelheid.hondius.akm.LayerRole
 import org.adelheid.hondius.akm.image.decodePng
 import org.adelheid.hondius.akm.image.encodePng
 import org.adelheid.hondius.akm.v1.AkmV1Edge
-import org.adelheid.hondius.akm.v1.AkmV1Region
 import org.adelheid.hondius.akm.v1.AkmV1Territory
 import org.adelheid.hondius.akm.v1.GridGeometry
 import org.adelheid.hondius.container.Author
@@ -17,7 +16,6 @@ import org.adelheid.hondius.rkm.RkmMap
 import org.adelheid.hondius.rkm.RkmTerritoryIdentity
 import kotlin.jvm.JvmOverloads
 import kotlin.jvm.JvmStatic
-import kotlin.math.abs
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -30,8 +28,8 @@ import kotlin.uuid.Uuid
  * 3. Trace shared boundary contours in a single pass.
  * 4. Simplify with Visvalingam-Whyatt and smooth with Taubin (per chain).
  * 5. Classify rings into exterior / hole and group into regions.
- * 6. Compute pole-of-inaccessibility anchors.
- * 7. Put the outlines onto the map's grid, and turn the RKM border set into connections.
+ * 6. Put the outlines onto the map's grid, and turn the RKM border set into connections.
+ * 7. Give each territory its anchor: the point of its largest region that lies furthest from an edge.
  * 8. Split the base image into color-classified layers and embed each as PNG.
  *
  * @property simplifier line simplifier applied per chain
@@ -80,19 +78,10 @@ class RkmToAkmConverter @JvmOverloads constructor(
 
 			val regions = RingClassifier.classify(filtered)
 
-			// Visual centroid via pole-of-inaccessibility on the largest region.
-			var centroidX = width / 2f
-			var centroidY = height / 2f
+			// A territory with no region has no shape to draw, and a map holds none without one. The traced
+			// outlines carry no label point; the grid conversion finds one.
 			if (regions.isNotEmpty()) {
-				val largest = largestRegion(regions)
-				val pole = PolyLabel.findPole(largest, 1f)
-				centroidX = pole[0].coerceIn(0f, width.toFloat())
-				centroidY = pole[1].coerceIn(0f, height.toFloat())
-			}
-
-			// A territory with no region has no shape to draw, and a map holds none without one.
-			if (regions.isNotEmpty()) {
-				territories.add(AkmV1Territory(territoryId, identity.rawValue, centroidX, centroidY, regions))
+				territories.add(AkmV1Territory(territoryId, identity.rawValue, 0f, 0f, regions))
 			}
 		}
 
@@ -105,7 +94,7 @@ class RkmToAkmConverter @JvmOverloads constructor(
 				edges.add(AkmV1Edge(sourceId, targetId, bidirectional = true))
 			}
 		}
-		val (gridTerritories, connections) = GridGeometry.convert(width, height, gridBits, territories, edges)
+		val (gridTerritories, connections) = GridGeometry.convert(width, height, gridBits, territories, edges, ownAnchors = false)
 
 		// 5. Split the base layer into color-classified layers and embed PNGs.
 		val splitResult = BaseLayerSplitter.split(baseLayer)
@@ -131,19 +120,6 @@ class RkmToAkmConverter @JvmOverloads constructor(
 	/** A canvas-sized layer under its standard name, at that name's conventional z-order. */
 	private fun layer(role: LayerRole, name: String, width: Int, height: Int, png: ByteArray): AkmLayer =
 		AkmLayer(role, name, AkmMap.STANDARD_LAYERS.getValue(name), 0, 0, width, height, ImageFormat.PNG, AkmImage.Inline(png))
-
-	private fun largestRegion(regions: List<AkmV1Region>): AkmV1Region {
-		var best = regions.first()
-		var bestArea = abs(best.exterior.signedArea())
-		for (i in 1 until regions.size) {
-			val area = abs(regions[i].exterior.signedArea())
-			if (area > bestArea) {
-				best = regions[i]
-				bestArea = area
-			}
-		}
-		return best
-	}
 
 	companion object {
 		const val DEFAULT_VW_MIN_AREA = 1.8f

@@ -97,6 +97,15 @@ class AkpV1ConverterTest {
 	}
 
 	@Test
+	fun aVersionOneFileIsToldFromACurrentOne() {
+		val bytes = AkpV1TestEncoder.encode(v1)
+		assertEquals(true, AkpV1Decoder.isVersion1(bytes))
+		assertEquals(false, AkpV1Decoder.isVersion1(AkpEncoder.encode(AkpV1Converter.convert(bytes))))
+		assertEquals(false, AkpV1Decoder.isVersion1(bytes.copyOfRange(0, 12)))
+		assertEquals(false, AkpV1Decoder.isVersion1(ByteArray(64)))
+	}
+
+	@Test
 	fun aBlankToolStampIsLeftOut() {
 		assertNull(AkpV1Converter.convert(v1.copy(editorVersion = "")).metadata.generator)
 	}

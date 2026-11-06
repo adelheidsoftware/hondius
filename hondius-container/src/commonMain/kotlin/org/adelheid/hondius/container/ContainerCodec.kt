@@ -1,5 +1,6 @@
 package org.adelheid.hondius.container
 
+import kotlin.jvm.JvmOverloads
 import kotlin.jvm.JvmStatic
 
 /** A file taken apart: its minor version, its metadata, and the chunks between `META` and `CKSM`. */
@@ -7,6 +8,13 @@ class ContainerFile(val versionMinor: Int, val metadata: Metadata, val chunks: L
 
 /** Where one chunk lies in a file, without its payload copied out. */
 class ChunkEntry(val tag: String, val flags: Int, val encoding: Int, val payloadOffset: Int, val payloadLength: Int)
+
+/**
+ * One chunk as it was met in a [ByteSource]: its header, and the start of its payload as far as it was asked for.
+ *
+ * @property head the leading bytes of the payload that were read; empty when none were asked for
+ */
+class ScannedChunk(val tag: String, val flags: Int, val encoding: Int, val payloadLength: Int, val head: ByteArray)
 
 /**
  * The outer structure both formats share: the header, the chunk sequence with `META` first, and the checksum last.
@@ -69,16 +77,7 @@ object ContainerCodec {
 	@JvmStatic
 	fun scan(data: ByteArray, signature: ByteArray): Pair<Int, List<ChunkEntry>> {
 		if (data.size < HEADER_SIZE) throw FormatException(FormatError.TRUNCATED, "The data is shorter than a header")
-		for (index in signature.indices) {
-			if (data[index] != signature[index]) throw FormatException(FormatError.BAD_SIGNATURE, "The data does not start with the format's signature")
-		}
-		val header = BinaryReader(data.copyOfRange(signature.size, HEADER_SIZE))
-		val major = header.readU16()
-		val minor = header.readU16()
-		if (major != VERSION_MAJOR) {
-			throw FormatException(FormatError.UNSUPPORTED_VERSION, "The file is version $major.$minor; this reader implements version $VERSION_MAJOR")
-		}
-		if (header.readU32() != 0) throw FormatException(FormatError.BAD_STRUCTURE, "The reserved header field is not zero")
+		val minor = readHeader(data.copyOfRange(0, HEADER_SIZE), signature)
 
 		val entries = ArrayList<ChunkEntry>()
 		var position = HEADER_SIZE
@@ -87,36 +86,101 @@ object ContainerCodec {
 				throw FormatException(FormatError.BAD_STRUCTURE, "Data follows the checksum chunk")
 			}
 			if (data.size - position < CHUNK_HEADER_SIZE) throw FormatException(FormatError.TRUNCATED, "The data ends inside a chunk header")
-			val head = BinaryReader(data.copyOfRange(position, position + CHUNK_HEADER_SIZE))
-			val tag = head.readExact(4).map { (it.toInt() and 0xFF).toChar() }.joinToString("")
-			val flags = head.readU8()
-			val encoding = head.readU8()
-			val length = head.readU32()
-			// Constructing the chunk header as a Chunk applies the tag and flag rules in one place
-			Chunk(tag, flags, EMPTY, encoding)
+			val head = readChunkHeader(data.copyOfRange(position, position + CHUNK_HEADER_SIZE))
 			position += CHUNK_HEADER_SIZE
-			if (length < 0 || length > data.size - position) {
-				throw FormatException(FormatError.TRUNCATED, "Chunk $tag declares more bytes than the data holds")
+			if (head.payloadLength < 0 || head.payloadLength > data.size - position) {
+				throw FormatException(FormatError.TRUNCATED, "Chunk ${head.tag} declares more bytes than the data holds")
 			}
-			if (tag == META && entries.isNotEmpty()) throw FormatException(FormatError.BAD_CHUNK_ORDER, "META occurs after the first chunk")
-			entries.add(ChunkEntry(tag, flags, encoding, position, length))
-			position += length
+			if (head.tag == META && entries.isNotEmpty()) throw FormatException(FormatError.BAD_CHUNK_ORDER, "META occurs after the first chunk")
+			entries.add(ChunkEntry(head.tag, head.flags, head.encoding, position, head.payloadLength))
+			position += head.payloadLength
 		}
-		if (entries.isEmpty() || entries.first().tag != META) throw FormatException(FormatError.BAD_CHUNK_ORDER, "The first chunk is not META")
-		if (entries.last().tag != CKSM) throw FormatException(FormatError.TRUNCATED, "The data ends without a checksum chunk")
+		checkEnds(entries.firstOrNull()?.tag, entries.lastOrNull()?.tag)
 		return Pair(minor, entries)
+	}
+
+	/**
+	 * Lists the chunks of a file read from [source], `META` first and `CKSM` last, the way [scan] does for bytes in
+	 * memory. Of each payload it reads only the leading bytes that [headLength] asks for and passes over the rest, so
+	 * a large file is looked into without being loaded.
+	 *
+	 * @param headLength given a chunk's tag and the length of its payload, how many leading bytes of the payload to
+	 *   read; more than the payload holds means all of it
+	 * @return the file's minor version and its chunks
+	 */
+	@JvmStatic
+	fun scan(source: ByteSource, signature: ByteArray, headLength: (tag: String, payloadLength: Int) -> Int): Pair<Int, List<ScannedChunk>> {
+		if (source.remaining < HEADER_SIZE) throw FormatException(FormatError.TRUNCATED, "The data is shorter than a header")
+		val minor = readHeader(source.read(HEADER_SIZE), signature)
+
+		val chunks = ArrayList<ScannedChunk>()
+		while (source.remaining > 0) {
+			if (chunks.isNotEmpty() && chunks.last().tag == CKSM) {
+				throw FormatException(FormatError.BAD_STRUCTURE, "Data follows the checksum chunk")
+			}
+			if (source.remaining < CHUNK_HEADER_SIZE) throw FormatException(FormatError.TRUNCATED, "The data ends inside a chunk header")
+			val head = readChunkHeader(source.read(CHUNK_HEADER_SIZE))
+			if (head.payloadLength < 0 || head.payloadLength > source.remaining) {
+				throw FormatException(FormatError.TRUNCATED, "Chunk ${head.tag} declares more bytes than the data holds")
+			}
+			if (head.tag == META && chunks.isNotEmpty()) throw FormatException(FormatError.BAD_CHUNK_ORDER, "META occurs after the first chunk")
+			val wanted = headLength(head.tag, head.payloadLength).coerceIn(0, head.payloadLength)
+			val bytes = if (wanted > 0) source.read(wanted) else EMPTY
+			source.skip((head.payloadLength - wanted).toLong())
+			chunks.add(ScannedChunk(head.tag, head.flags, head.encoding, head.payloadLength, bytes))
+		}
+		checkEnds(chunks.firstOrNull()?.tag, chunks.lastOrNull()?.tag)
+		return Pair(minor, chunks)
+	}
+
+	/** Checks the 16-byte header against [signature] and returns the minor version. */
+	private fun readHeader(header: ByteArray, signature: ByteArray): Int {
+		for (index in signature.indices) {
+			if (header[index] != signature[index]) throw FormatException(FormatError.BAD_SIGNATURE, "The data does not start with the format's signature")
+		}
+		val reader = BinaryReader(header.copyOfRange(signature.size, HEADER_SIZE))
+		val major = reader.readU16()
+		val minor = reader.readU16()
+		if (major != VERSION_MAJOR) {
+			throw FormatException(FormatError.UNSUPPORTED_VERSION, "The file is version $major.$minor; this reader implements version $VERSION_MAJOR")
+		}
+		if (reader.readU32() != 0) throw FormatException(FormatError.BAD_STRUCTURE, "The reserved header field is not zero")
+		return minor
+	}
+
+	private class ChunkHeader(val tag: String, val flags: Int, val encoding: Int, val payloadLength: Int)
+
+	private fun readChunkHeader(bytes: ByteArray): ChunkHeader {
+		val reader = BinaryReader(bytes)
+		val tag = reader.readExact(4).map { (it.toInt() and 0xFF).toChar() }.joinToString("")
+		val flags = reader.readU8()
+		val encoding = reader.readU8()
+		val length = reader.readU32()
+		// Constructing the chunk header as a Chunk applies the tag and flag rules in one place
+		Chunk(tag, flags, EMPTY, encoding)
+		return ChunkHeader(tag, flags, encoding, length)
+	}
+
+	private fun checkEnds(firstTag: String?, lastTag: String?) {
+		if (firstTag != META) throw FormatException(FormatError.BAD_CHUNK_ORDER, "The first chunk is not META")
+		if (lastTag != CKSM) throw FormatException(FormatError.TRUNCATED, "The data ends without a checksum chunk")
 	}
 
 	/**
 	 * Puts a file together: the header, `META` holding [metadata], [chunks] in the order given, and the checksum.
 	 * The caller passes its format's chunks in the format's order, followed by the ones it carries along.
+	 *
+	 * @param versionMinor the minor version the header names. A file that is written again with only its metadata
+	 *   changed keeps the one it had.
 	 */
 	@JvmStatic
-	fun write(signature: ByteArray, metadata: Metadata, chunks: List<Chunk>): ByteArray {
+	@JvmOverloads
+	fun write(signature: ByteArray, metadata: Metadata, chunks: List<Chunk>, versionMinor: Int = VERSION_MINOR): ByteArray {
+		require(versionMinor in 0..0xFFFF) { "A minor version is 0 to 65535, got $versionMinor" }
 		val out = BinaryWriter(1024)
 		out.writeBytes(signature)
 		out.writeU16(VERSION_MAJOR)
-		out.writeU16(VERSION_MINOR)
+		out.writeU16(versionMinor)
 		out.writeU32(0)
 		writeChunk(out, Chunk(META, Chunk.REQUIRED, MetadataCodec.encode(metadata)))
 		for (chunk in chunks) {

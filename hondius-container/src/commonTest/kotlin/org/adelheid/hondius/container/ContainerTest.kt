@@ -204,6 +204,58 @@ class ContainerCodecTest {
 	}
 
 	@Test
+	fun aFileCanBeWrittenUnderTheMinorVersionItCameWith() {
+		val later = ContainerCodec.write(signature, metadata, listOf(body, extra), versionMinor = 3)
+		val read = ContainerCodec.read(later, signature)
+		assertEquals(3, read.versionMinor)
+		assertEquals(listOf(body, extra), read.chunks)
+	}
+
+	/** Counts what is read from it, so a test can tell that payloads were passed over. */
+	private class CountingSource(data: ByteArray) : ByteSource {
+		private val inner = ByteArraySource(data)
+		var bytesRead = 0
+			private set
+
+		override val remaining: Long get() = inner.remaining
+		override fun read(count: Int): ByteArray = inner.read(count).also { bytesRead += count }
+		override fun skip(count: Long) = inner.skip(count)
+	}
+
+	@Test
+	fun aFileReadFrontToBackListsItsChunksAndReadsOnlyWhatIsAskedFor() {
+		val data = file(body, extra)
+		val source = CountingSource(data)
+		val (minor, chunks) = ContainerCodec.scan(source, signature) { tag, _ -> if (tag == "GEOM") 2 else 0 }
+		assertEquals(0, minor)
+		assertEquals(ContainerCodec.scan(data, signature).second.map { it.tag }, chunks.map { it.tag })
+		assertEquals(listOf("META", "GEOM", "xtra", "CKSM"), chunks.map { it.tag })
+		assertEquals(3, chunks[1].payloadLength)
+		assertContentEquals(byteArrayOf(1, 2), chunks[1].head)
+		assertEquals(0, chunks[2].head.size)
+		assertEquals(Chunk.COPY_SAFE, chunks[2].flags)
+		// The header, four chunk headers and two payload bytes
+		assertEquals(16 + 4 * 10 + 2, source.bytesRead)
+		assertEquals(0L, source.remaining)
+
+		// Asking for more than a payload holds reads all of it
+		val whole = ContainerCodec.scan(ByteArraySource(data), signature) { _, _ -> Int.MAX_VALUE }.second
+		assertContentEquals(body.payload, whole[1].head)
+	}
+
+	@Test
+	fun aFileReadFrontToBackIsRefusedForTheSameFaults() {
+		val data = file(body)
+		fun scan(bytes: ByteArray) = ContainerCodec.scan(ByteArraySource(bytes), signature) { _, length -> length }
+		assertFormatError(FormatError.TRUNCATED) { scan(data.copyOfRange(0, 10)) }
+		assertFormatError(FormatError.TRUNCATED) { scan(data.copyOfRange(0, data.size - 1)) }
+		assertFormatError(FormatError.TRUNCATED) { scan(data.copyOfRange(0, data.size - 43)) }
+		assertFormatError(FormatError.BAD_STRUCTURE) { scan(data + byteArrayOf(0)) }
+		assertFormatError(FormatError.BAD_SIGNATURE) { scan(ContainerCodec.write(ContainerCodec.signature("AKP"), metadata, listOf(body))) }
+		assertFormatError(FormatError.UNSUPPORTED_VERSION) { scan(data.copyOf().also { it[9] = 3 }) }
+	}
+
+	@Test
 	fun theHeaderIsSixteenBytesInTheVersionOneLayout() {
 		val bytes = file(body)
 		assertContentEquals(byteArrayOf(0x83.toByte(), 0x41, 0x4B, 0x4D, 0x0D, 0x0A, 0x1A, 0x0A, 0, 2, 0, 0, 0, 0, 0, 0), bytes.copyOfRange(0, 16))

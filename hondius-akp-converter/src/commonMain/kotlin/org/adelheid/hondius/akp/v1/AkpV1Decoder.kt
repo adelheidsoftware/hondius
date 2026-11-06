@@ -16,6 +16,18 @@ import kotlin.jvm.JvmStatic
 object AkpV1Decoder {
 	private const val HEADER_SIZE = 16
 
+	/**
+	 * True when [data] opens with the palette signature and names version 1: a file for [decode], where a file of the
+	 * current version, which opens with the same signature, is for the current decoder.
+	 */
+	@JvmStatic
+	fun isVersion1(data: ByteArray): Boolean {
+		if (data.size < HEADER_SIZE) return false
+		val signature = ContainerCodec.signature("AKP")
+		if (!data.copyOfRange(0, signature.size).contentEquals(signature)) return false
+		return BinaryReader(data.copyOfRange(signature.size, HEADER_SIZE)).readU16() == 1
+	}
+
 	@JvmStatic
 	fun decode(data: ByteArray): AkpV1Palette {
 		if (data.size < HEADER_SIZE) throw FormatException(FormatError.TRUNCATED, "The data is shorter than a header")

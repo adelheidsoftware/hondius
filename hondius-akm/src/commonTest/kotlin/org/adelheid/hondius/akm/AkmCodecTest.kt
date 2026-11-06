@@ -4,6 +4,8 @@ import org.adelheid.hondius.akm.codec.AkmDecoder
 import org.adelheid.hondius.akm.codec.AkmEncoder
 import org.adelheid.hondius.container.Author
 import org.adelheid.hondius.container.BinaryWriter
+import org.adelheid.hondius.container.ByteArraySource
+import org.adelheid.hondius.container.ByteSource
 import org.adelheid.hondius.container.Chunk
 import org.adelheid.hondius.container.ContainerCodec
 import org.adelheid.hondius.container.FormatError
@@ -13,6 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 /** What the map tests share: small shapes, valid image files, and the check that a fault is refused for its reason. */
 internal object Fixtures {
@@ -124,6 +127,48 @@ class AkmCodecTest {
 		assertEquals(3, summary.territoryCount)
 		assertEquals(3, summary.layerCount)
 		assertEquals(0, summary.versionMinor)
+	}
+
+	@Test
+	fun aSummaryOfAFileOnDiskPassesOverOutlinesAndImages() {
+		val bytes = AkmEncoder.encode(fullMap())
+		var bytesRead = 0
+		val inner = ByteArraySource(bytes)
+		val source = object : ByteSource {
+			override val remaining: Long get() = inner.remaining
+			override fun read(count: Int): ByteArray = inner.read(count).also { bytesRead += count }
+			override fun skip(count: Long) = inner.skip(count)
+		}
+		val summary = AkmDecoder.summarize(source)
+		val whole = AkmDecoder.summarize(bytes)
+		assertEquals(whole.metadata, summary.metadata)
+		assertEquals(listOf(whole.canvasWidth, whole.canvasHeight, whole.gridBits, whole.territoryCount, whole.layerCount),
+			listOf(summary.canvasWidth, summary.canvasHeight, summary.gridBits, summary.territoryCount, summary.layerCount))
+
+		// The header, the ten-byte header of each chunk, the metadata, and sixteen bytes of the geometry
+		val chunks = ContainerCodec.scan(bytes, signature).second
+		assertEquals(16 + chunks.size * 10 + chunks.first().payloadLength + 16, bytesRead)
+		assertTrue(bytesRead < bytes.size, "$bytesRead of ${bytes.size} bytes were read")
+
+		assertFormatError(FormatError.TRUNCATED) { AkmDecoder.summarize(ByteArraySource(bytes.copyOfRange(0, bytes.size - 5))) }
+	}
+
+	@Test
+	fun metadataIsReplacedWithoutTouchingTheRest() {
+		val map = fullMap()
+		val bytes = AkmEncoder.encode(map)
+		val credited = Metadata(name = "Renamed", authors = listOf(Author.Credit("Adelkrieg")))
+		val restamped = AkmEncoder.withMetadata(bytes, credited)
+		val expected = AkmMap(map.canvasWidth, map.canvasHeight, map.territories, map.connections, map.gridBits, map.land, map.lines, map.layers, credited, map.carriedChunks)
+		assertContentEquals(AkmEncoder.encode(expected), restamped)
+		assertEquals(expected, AkmDecoder.decode(restamped))
+
+		// A file of a later minor version keeps saying so
+		val later = ContainerCodec.write(signature, map.metadata, ContainerCodec.read(bytes, signature).chunks, versionMinor = 2)
+		assertEquals(2, AkmDecoder.summarize(AkmEncoder.withMetadata(later, credited)).versionMinor)
+
+		val damaged = bytes.copyOf().also { it[it.size - 1] = (it[it.size - 1] + 1).toByte() }
+		assertFormatError(FormatError.BAD_CHECKSUM) { AkmEncoder.withMetadata(damaged, credited) }
 	}
 
 	@Test

@@ -81,8 +81,18 @@ val palette: AkpPalette = AkpDecoder.decode(bytes)
 ```
 
 A decoder refuses anything that is not a valid file with a `FormatException`, whose `error` names the rule that was
-broken. `AkmDecoder.summarize(bytes)` reads a map's metadata, canvas and counts without decoding its outlines or
-images.
+broken.
+
+Beside the codecs, the libraries offer what a host or an editor needs around them:
+
+| Call | What it is for |
+| --- | --- |
+| `AkmDecoder.summarize(bytes)` | A map's metadata, canvas and counts, without decoding its outlines or images |
+| `AkmDecoder.summarize(source)` | The same from a `ByteSource`, such as a file on disk: the images are passed over, not read |
+| `AkmEncoder.withMetadata(file, metadata)`, `AkpEncoder.withMetadata(file, metadata)` | Replaces a stored file's metadata, for a host that says who the authors are when it serves a file |
+| `AkmGrid` | Puts float pixel outlines onto a map's grid and back, for an editor that works in pixels |
+| `AkmAnchors.of(territory, gridBits)` | Where a territory's label goes: its anchor, or a point inside it when it has none |
+| `AkmBorders.shared(map)`, `AkmBorders.contacts(map)` | The borders neighbors share, and the places where they touch without sharing a vertex |
 
 Older files go through the converters:
 
@@ -94,6 +104,9 @@ import org.adelheid.hondius.rkm.codec.RkmDecoder
 val fromVersionOne: AkmMap = AkmV1Converter.convert(versionOneBytes)
 val fromLegacy: AkmMap = RkmToAkmConverter().convert(RkmDecoder.decode(rkmBytes))
 ```
+
+A version 1 file opens with the same signature as a current one. `AkmV1Decoder.isVersion1(bytes)` and
+`AkpV1Decoder.isVersion1(bytes)` tell them apart.
 
 ## Building
 

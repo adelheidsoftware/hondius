@@ -1,0 +1,19 @@
+[package]
+name = "hondius-png"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "PNG codec for the Hondius map converter. Compiled to Wasm and consumed by its Kotlin/JS and Kotlin/Wasm targets."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2.129"
+png = "0.18.1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+codegen-units = 1

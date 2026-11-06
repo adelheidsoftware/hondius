@@ -1,0 +1,14 @@
+name "Conformance"
+generator "hondius-test/1.0"
+author account adelkrieg.com 00000000-0000-0000-0000-000000000099
+role borders 116,79,40,255
+role connections 148,125,111,255
+role labels 116,79,40,255
+role land 200,183,173,255
+role shore-line 250,250,240,128
+role territories 224,219,227,255
+role water 192,163,146,255
+player 0 "Salmon" 255,140,150,255
+player 1 "Teal" 0,128,128,255
+player 2 "Åsa's blue" 10,20,250,200
+carried glow flags 2 encoding 0 payload 010203

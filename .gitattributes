@@ -1,0 +1,14 @@
+# Text files use LF line endings, in the repository and in every checkout.
+* text=auto eol=lf
+
+# The wrapper scripts must keep their native line endings on every platform.
+/gradlew text eol=lf
+*.bat text eol=crlf
+
+# Never normalized or diffed as text: the map and palette files the tests read are compared byte for byte.
+*.jar binary
+*.wasm binary
+*.png binary
+*.akm binary
+*.akp binary
+*.rkm binary

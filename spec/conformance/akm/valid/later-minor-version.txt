@@ -1,0 +1,8 @@
+canvas 10 10 grid 4
+name "Later"
+metadata-field 9 010203
+metadata-bytes 01054c617465720903010203
+territory 0 id 00000000-0000-0000-0000-000000000001 name ""
+  region
+    ring 0,0 10,0 10,10 0,10
+carried tags flags 2 encoding 0 payload 0405

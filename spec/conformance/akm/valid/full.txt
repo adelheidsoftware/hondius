@@ -1,0 +1,27 @@
+canvas 100 80 grid 4
+name "Conformance"
+generator "hondius-test/1.0"
+author account adelkrieg.com 00000000-0000-0000-0000-000000000099
+author credit "A friend"
+metadata-bytes 010b436f6e666f726d616e63650210686f6e646975732d746573742f312e30032c010d6164656c6b726965672e636f6d0201000000000000000000000000000000009900084120667269656e64
+territory 0 id 00000000-0000-0000-0000-000000000001 name "Mainland" anchor 20,20
+  region
+    ring 0,0 160,0 160,160 0,160
+    ring 40,120 120,120 120,40 40,40
+territory 1 id 00000000-0000-0000-0000-000000000002 name ""
+  region
+    ring 160,0 320,0 320,160 160,160
+territory 2 id 00000000-0000-0000-0000-000000000003 name "Îles"
+  region
+    ring 400,400 500,400 500,500 400,500
+  region
+    ring 600,400 650,400 650,450 600,450
+connection 0 1 both-ways
+connection 2 0 one-way
+land
+  region
+    ring 800,800 1000,800 1000,1000 800,1000
+line 320,80 360,200 400,400
+layer "terrain" role BELOW z 5 blend NORMAL opacity 255 at 0,0 size 100x80 PNG inline 59 bytes sha256 4da606f54bdebcda324a8b32f7ae663159b94273b1a27d0db28a5c93191e0e8e
+layer "labels" role LABEL_ART z 30 blend MULTIPLY opacity 200 at 10,10 size 50x40 WEBP inline 24 bytes sha256 ffac4b71c0f76cc06fd163dc2234e39ffb25644d3e2b7ced02f208b272413b6a
+layer "frame" role ABOVE z 40 blend NORMAL opacity 255 at 0,0 size 100x80 PNG external 123456 bytes sha256 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f hints [art/frame.png]

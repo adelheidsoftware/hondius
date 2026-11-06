@@ -1,0 +1,23 @@
+# Gradle and Kotlin
+.gradle
+.kotlin
+build
+local.properties
+
+# IDEs and the OS
+.idea
+*.iml
+.DS_Store
+
+# Cargo build output. Each crate's pkg/ is committed: the .wasm ships with the repository, so a build without a Rust
+# toolchain works.
+native/*/target
+*.rs.bk
+
+# Keys and credentials never belong here; the root build also rejects them in the property files
+*.gpg
+*.asc
+*.jks
+*.p12
+secring*
+.env*

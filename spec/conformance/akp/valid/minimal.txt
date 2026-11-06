@@ -1,0 +1,7 @@
+role borders 116,79,40,255
+role connections 148,125,111,255
+role labels 116,79,40,255
+role land 200,183,173,255
+role territories 224,219,227,255
+role water 192,163,146,255
+player 0 "Salmon" 255,140,150,255
